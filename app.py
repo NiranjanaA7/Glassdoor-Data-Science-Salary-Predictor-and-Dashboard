@@ -216,7 +216,7 @@ unsafe_allow_html=True,
 
 BASE_DIR = Path(__file__).resolve().parent
 
-DATA_PATH = BASE_DIR / "data/featured_jobs.csv"
+DATA_PATH = BASE_DIR / "featured_jobs.csv"
 MODEL_PATH = BASE_DIR / "salary_prediction_model.pkl"
 
 META_PATH = BASE_DIR / "salary_prediction_meta.json"
