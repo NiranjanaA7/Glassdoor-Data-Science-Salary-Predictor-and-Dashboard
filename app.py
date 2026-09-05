@@ -3,7 +3,7 @@ Glassdoor Data Science Jobs Dashboard
 =====================================
 
 Interactive Streamlit dashboard built from:
-    data/featured_jobs.csv
+    featured_jobs.csv
 
 Includes:
     • Key metrics
@@ -66,6 +66,30 @@ PURPLE = {
     "light": "#C8A2C8",
     "very_light": "#F5F0FA",
 }
+
+# Canonical, human-logical ordering for Experience_Group. This exists
+# because the raw values are plain strings ("0-2 Years", "10+ Years",
+# "3-5 Years", "6-10 Years"), and sorting them alphabetically (as
+# Python's sorted() does when the model metadata was built) produces
+# 0-2, 10+, 3-5, 6-10 instead of the intended youngest -> most senior
+# progression. Anything that lists or orders experience buckets --
+# charts, dropdowns -- should sort against this list, not alphabetically.
+EXPERIENCE_ORDER = [
+    "0-2 Years",
+    "3-5 Years",
+    "6-10 Years",
+    "10+ Years",
+    "Unknown",
+]
+
+
+def sort_by_experience_order(values):
+    """Return `values` sorted into EXPERIENCE_ORDER; anything not in
+    the canonical list (shouldn't normally happen) is appended at the
+    end, alphabetically, rather than silently dropped."""
+    known = [v for v in EXPERIENCE_ORDER if v in values]
+    unknown = sorted(v for v in values if v not in EXPERIENCE_ORDER)
+    return known + unknown
 
 # US state code -> full name, used to display readable state/country
 # labels in the Geography tab and the salary predictor instead of raw
@@ -192,7 +216,7 @@ unsafe_allow_html=True,
 
 BASE_DIR = Path(__file__).resolve().parent
 
-DATA_PATH = BASE_DIR / "featured_jobs.csv"
+DATA_PATH = BASE_DIR / "data/featured_jobs.csv"
 MODEL_PATH = BASE_DIR / "salary_prediction_model.pkl"
 
 META_PATH = BASE_DIR / "salary_prediction_meta.json"
@@ -702,8 +726,12 @@ with tab_salary:
             ax=ax,
         )
 
+        # Sample size in the title so the shape of the histogram is
+        # never read without knowing how many postings it's built
+        # from (a 25-bin histogram over a handful of filtered rows
+        # looks very different from one over the full dataset).
         ax.set_title(
-            "Salary Distribution"
+            f"Salary Distribution (n = {len(filtered)})"
         )
 
         ax.set_xlabel(
@@ -765,6 +793,23 @@ with tab_salary:
 
         ax.set_ylabel(
             "Average Salary (K USD)"
+        )
+
+        # Sample size per role, right on the x-tick label. A box built
+        # from 5 postings and a box built from 150 postings should not
+        # look equally trustworthy, so the count goes on the axis
+        # itself instead of requiring a trip to another tab.
+        role_counts = filtered["Job_Simplified"].value_counts()
+
+        ax.set_xticks(
+            range(len(order))
+        )
+
+        ax.set_xticklabels(
+            [
+                f"{role}\n(n={role_counts.get(role, 0)})"
+                for role in order
+            ]
         )
 
         plt.xticks(
@@ -867,6 +912,15 @@ with tab_roles:
             "Job Role"
         )
 
+        # Exact count at the end of each bar, same treatment as the
+        # Skills, Experience, and Remote charts already get -- this
+        # was the one count-style chart in the dashboard without its
+        # own on-bar numbers.
+        ax.bar_label(
+            ax.containers[0],
+            padding=3,
+        )
+
         plt.tight_layout()
 
         st.pyplot(
@@ -883,13 +937,7 @@ with tab_roles:
 
     with col2:
 
-        exp_order = [
-            "0-2 Years",
-            "3-5 Years",
-            "6-10 Years",
-            "10+ Years",
-            "Unknown",
-        ]
+        exp_order = EXPERIENCE_ORDER
 
         exp_counts = (
             filtered[
@@ -1006,18 +1054,27 @@ with tab_roles:
 
 with tab_skills:
 
-    st.subheader("🛠️ Technical Skills")
+    st.subheader(
+        "🛠️ Technical Skills"
+    )
 
     if skill_cols_all:
 
         skill_counts = (
-            filtered[skill_cols_all]
+            filtered[
+                skill_cols_all
+            ]
             .sum()
-            .sort_values(ascending=False)
+            .sort_values(
+                ascending=False
+            )
             .reset_index()
         )
 
-        skill_counts.columns = ["Skill", "Count"]
+        skill_counts.columns = [
+            "Skill",
+            "Count",
+        ]
 
         skill_counts["Skill"] = (
             skill_counts["Skill"]
@@ -1055,47 +1112,91 @@ with tab_skills:
                 f"appearing in only **{rarest_pct:.0f}%** of postings."
             )
 
-        # ------------------------------------------------------
-        # SKILL BAR CHART
-        # ------------------------------------------------------
-
-        n_skills = len(skill_counts)
-        fig_height = max(6, 0.45 * n_skills)
-
-        fig, ax = plt.subplots(figsize=(10, fig_height))
-
-        bar = sns.barplot(
-            data=skill_counts,
-            x="Count",
-            y="Skill",
-            color=PURPLE["light"],
-            ax=ax,
+        col1, col2 = st.columns(
+            [2, 1]
         )
 
-        for i, value in enumerate(skill_counts["Count"]):
-            bar.text(
-                value + 0.5,
-                i,
-                str(int(value)),
-                va="center",
+
+        with col1:
+
+            # Size the figure to the number of skills so every
+            # label gets room and none are clipped off the bottom.
+            n_skills = len(skill_counts)
+            fig_height = max(6, 0.45 * n_skills)
+
+            fig, ax = plt.subplots(
+                figsize=(9, fig_height)
             )
 
-        ax.set_title("Most Requested Skills & Tools")
-        ax.set_xlabel("Number of Postings")
-        ax.set_ylabel("Skill")
+            bar = sns.barplot(
+                data=skill_counts,
+                x="Count",
+                y="Skill",
+                color=PURPLE["light"],
+                ax=ax,
+            )
 
-        plt.tight_layout()
+            for i, value in enumerate(
+                skill_counts["Count"]
+            ):
 
-        st.pyplot(
-            fig,
-            use_container_width=True,
-        )
+                bar.text(
+                    value + 0.5,
+                    i,
+                    str(int(value)),
+                    va="center",
+                )
 
-        plt.close(fig)
+            ax.set_title(
+                "Most Requested Skills & Tools"
+            )
+
+            ax.set_xlabel(
+                "Number of Postings"
+            )
+
+            ax.set_ylabel(
+                "Skill"
+            )
+
+            plt.tight_layout()
+
+            st.pyplot(
+                fig,
+                use_container_width=True,
+            )
+
+            plt.close(fig)
+
+
+        with col2:
+
+            st.markdown(
+                "#### Skill Ranking"
+            )
+
+            display_skills = skill_counts.copy()
+
+            table_height = min(
+                35 * (len(display_skills) + 1),
+                700,
+            )
+
+            st.dataframe(
+                display_skills,
+                use_container_width=True,
+                hide_index=True,
+                height=table_height,
+            )
+
 
     else:
 
-        st.info("No `*_yn` skill columns were found.")
+        st.info(
+            "No `*_yn` skill columns were found."
+        )
+
+
 # ============================================================
 # GEOGRAPHY TAB
 # ============================================================
@@ -1149,9 +1250,30 @@ with tab_geo:
         ax=ax,
     )
 
-    ax.set_title(
-        "Top Hiring States"
+    # Exact posting count at the end of each state's bar.
+    ax.bar_label(
+        ax.containers[0],
+        padding=3,
     )
+
+    # Make the top-15 cutoff explicit in the title -- otherwise a
+    # filtered view with fewer than 15 states on screen looks
+    # identical to "this chart is always capped at 15", when it's
+    # actually showing every state that matched the current filter.
+    n_states_total = len(full_state_counts)
+    n_states_shown = len(state_counts)
+
+    if n_states_total > n_states_shown:
+        title = (
+            f"Top Hiring States "
+            f"(top {n_states_shown} of {n_states_total})"
+        )
+    else:
+        title = (
+            f"Top Hiring States (all {n_states_total} shown)"
+        )
+
+    ax.set_title(title)
 
     ax.set_xlabel(
         "Number of Postings"
@@ -1339,11 +1461,13 @@ with tab_predict:
                 [],
             )
 
-            experience_options = model_meta[
-                "categorical_options"
-            ].get(
-                "Experience_Group",
-                [],
+            experience_options = sort_by_experience_order(
+                model_meta[
+                    "categorical_options"
+                ].get(
+                    "Experience_Group",
+                    [],
+                )
             )
 
 
