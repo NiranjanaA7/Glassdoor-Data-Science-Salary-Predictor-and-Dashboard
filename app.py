@@ -1801,6 +1801,81 @@ unsafe_allow_html=True,
 
 
                 # --------------------------------------------
+                # PREDICTED SALARY CHART
+                # --------------------------------------------
+                # Plots the predicted value against the salary
+                # distribution of the postings currently in view, so
+                # the single number above has visual context: is it
+                # a typical salary, or an outlier on either end?
+
+                st.markdown(
+                    "#### 📊 Your Prediction In Context"
+                )
+
+                fig, ax = plt.subplots(
+                    figsize=(9, 5)
+                )
+
+                sns.histplot(
+                    filtered["Avg_Salary"],
+                    bins=25,
+                    kde=True,
+                    color=PURPLE["light"],
+                    ax=ax,
+                )
+
+                ax.axvspan(
+                    lower,
+                    upper,
+                    color=PURPLE["mauve"],
+                    alpha=0.18,
+                    label=f"Estimated range (±MAE): ${lower:,.0f}K–${upper:,.0f}K",
+                )
+
+                ax.axvline(
+                    prediction,
+                    color=PURPLE["dark"],
+                    linewidth=2.5,
+                    linestyle="--",
+                    label=f"Your prediction: ${prediction:,.0f}K",
+                )
+
+                ax.axvline(
+                    filtered_avg_salary,
+                    color="gray",
+                    linewidth=1.5,
+                    linestyle=":",
+                    label=f"Filtered avg: ${filtered_avg_salary:,.0f}K",
+                )
+
+                ax.set_title(
+                    f"Predicted Salary vs. Current Postings (n = {len(filtered)})"
+                )
+
+                ax.set_xlabel(
+                    "Average Salary (K USD)"
+                )
+
+                ax.set_ylabel(
+                    "Number of Postings"
+                )
+
+                ax.legend(
+                    loc="upper right",
+                    fontsize=9,
+                )
+
+                plt.tight_layout()
+
+                st.pyplot(
+                    fig,
+                    use_container_width=True,
+                )
+
+                plt.close(fig)
+
+
+                # --------------------------------------------
                 # RESULT METRICS
                 # --------------------------------------------
 
