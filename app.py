@@ -1054,27 +1054,18 @@ with tab_roles:
 
 with tab_skills:
 
-    st.subheader(
-        "🛠️ Technical Skills"
-    )
+    st.subheader("🛠️ Technical Skills")
 
     if skill_cols_all:
 
         skill_counts = (
-            filtered[
-                skill_cols_all
-            ]
+            filtered[skill_cols_all]
             .sum()
-            .sort_values(
-                ascending=False
-            )
+            .sort_values(ascending=False)
             .reset_index()
         )
 
-        skill_counts.columns = [
-            "Skill",
-            "Count",
-        ]
+        skill_counts.columns = ["Skill", "Count"]
 
         skill_counts["Skill"] = (
             skill_counts["Skill"]
@@ -1112,91 +1103,47 @@ with tab_skills:
                 f"appearing in only **{rarest_pct:.0f}%** of postings."
             )
 
-        col1, col2 = st.columns(
-            [2, 1]
+        # ------------------------------------------------------
+        # SKILL BAR CHART
+        # ------------------------------------------------------
+
+        n_skills = len(skill_counts)
+        fig_height = max(6, 0.45 * n_skills)
+
+        fig, ax = plt.subplots(figsize=(10, fig_height))
+
+        bar = sns.barplot(
+            data=skill_counts,
+            x="Count",
+            y="Skill",
+            color=PURPLE["light"],
+            ax=ax,
         )
 
-
-        with col1:
-
-            # Size the figure to the number of skills so every
-            # label gets room and none are clipped off the bottom.
-            n_skills = len(skill_counts)
-            fig_height = max(6, 0.45 * n_skills)
-
-            fig, ax = plt.subplots(
-                figsize=(9, fig_height)
+        for i, value in enumerate(skill_counts["Count"]):
+            bar.text(
+                value + 0.5,
+                i,
+                str(int(value)),
+                va="center",
             )
 
-            bar = sns.barplot(
-                data=skill_counts,
-                x="Count",
-                y="Skill",
-                color=PURPLE["light"],
-                ax=ax,
-            )
+        ax.set_title("Most Requested Skills & Tools")
+        ax.set_xlabel("Number of Postings")
+        ax.set_ylabel("Skill")
 
-            for i, value in enumerate(
-                skill_counts["Count"]
-            ):
+        plt.tight_layout()
 
-                bar.text(
-                    value + 0.5,
-                    i,
-                    str(int(value)),
-                    va="center",
-                )
+        st.pyplot(
+            fig,
+            use_container_width=True,
+        )
 
-            ax.set_title(
-                "Most Requested Skills & Tools"
-            )
-
-            ax.set_xlabel(
-                "Number of Postings"
-            )
-
-            ax.set_ylabel(
-                "Skill"
-            )
-
-            plt.tight_layout()
-
-            st.pyplot(
-                fig,
-                use_container_width=True,
-            )
-
-            plt.close(fig)
-
-
-        with col2:
-
-            st.markdown(
-                "#### Skill Ranking"
-            )
-
-            display_skills = skill_counts.copy()
-
-            table_height = min(
-                35 * (len(display_skills) + 1),
-                700,
-            )
-
-            st.dataframe(
-                display_skills,
-                use_container_width=True,
-                hide_index=True,
-                height=table_height,
-            )
-
+        plt.close(fig)
 
     else:
 
-        st.info(
-            "No `*_yn` skill columns were found."
-        )
-
-
+        st.info("No `*_yn` skill columns were found.")
 # ============================================================
 # GEOGRAPHY TAB
 # ============================================================
