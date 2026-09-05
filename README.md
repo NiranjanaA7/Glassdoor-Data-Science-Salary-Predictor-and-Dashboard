@@ -23,7 +23,6 @@ An end-to-end analytics project that takes a raw Glassdoor "Data Science Jobs" d
 | `03_eda_visualization.ipynb` | Explores the engineered data and curates the chart set that made it into the dashboard, with reasoning for what was kept and cut. |
 | `04_model_training.py` | Trains and evaluates a salary-prediction model (Ridge, Random Forest, Gradient Boosting), tunes the best one, and exports `salary_prediction_model.pkl` + `salary_prediction_meta.json` for the dashboard. |
 | `app.py` | The Streamlit dashboard — sidebar filters, KPI cards, 7 charts, and a "Predict Salary" tab powered by the trained model. |
-| `Glassdoor_DS_Jobs_Project_Walkthrough_Review_v2.docx` | Full step-by-step walkthrough of the pipeline, the salary-imputation experiment, and an honest review of strengths/weaknesses. |
 | `requirements.txt` | Python dependencies needed to run the pipeline and dashboard. |
 
 ---
