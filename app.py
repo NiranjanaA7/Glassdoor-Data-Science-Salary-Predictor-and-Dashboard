@@ -726,6 +726,33 @@ with tab_salary:
             ax=ax,
         )
 
+        # Mean and median called out directly on the chart, so the
+        # story ("where does pay typically land, and is it skewed?")
+        # doesn't require the reader to eyeball the histogram shape.
+        salary_mean = filtered["Avg_Salary"].mean()
+        salary_median = filtered["Avg_Salary"].median()
+
+        ax.axvline(
+            salary_mean,
+            color=PURPLE["dark"],
+            linewidth=2,
+            linestyle="--",
+            label=f"Mean: ${salary_mean:,.0f}K",
+        )
+
+        ax.axvline(
+            salary_median,
+            color="gray",
+            linewidth=2,
+            linestyle=":",
+            label=f"Median: ${salary_median:,.0f}K",
+        )
+
+        ax.legend(
+            loc="upper right",
+            fontsize=9,
+        )
+
         # Sample size in the title so the shape of the histogram is
         # never read without knowing how many postings it's built
         # from (a 25-bin histogram over a handful of filtered rows
@@ -780,6 +807,14 @@ with tab_salary:
             y="Avg_Salary",
             order=order,
             color=PURPLE["light"],
+            showmeans=True,
+            meanprops={
+                "marker": "D",
+                "markerfacecolor": PURPLE["dark"],
+                "markeredgecolor": "white",
+                "markersize": 6,
+                "zorder": 5,
+            },
             ax=ax,
         )
 
@@ -795,12 +830,98 @@ with tab_salary:
             "Average Salary (K USD)"
         )
 
+        # --------------------------------------------------------
+        # MEDIAN LABELS + LOW-SAMPLE FLAGGING
+        # --------------------------------------------------------
+        # A box plot alone makes people compare fuzzy shapes to read
+        # off a number. Printing the exact median in dollars above
+        # each box turns "eyeball which box sits higher" into "read
+        # the number" -- the box shape is still there for anyone who
+        # wants spread/outliers, but it's no longer required just to
+        # get the headline figure. Roles built from very few postings
+        # (e.g. Director, n=8) are visually flagged (hatching + lighter
+        # fill) so a confident-looking median doesn't get read with
+        # the same trust as one built from 100+ postings.
+
+        overall_median = filtered["Avg_Salary"].median()
+
+        ax.axhline(
+            overall_median,
+            color="gray",
+            linewidth=1.2,
+            linestyle=":",
+            zorder=0,
+        )
+
+        role_counts = filtered["Job_Simplified"].value_counts()
+
+        LOW_SAMPLE_THRESHOLD = 15
+
+        low_sample_roles = []
+
+        for i, role in enumerate(order):
+
+            role_data = filtered.loc[
+                filtered["Job_Simplified"] == role,
+                "Avg_Salary",
+            ]
+
+            role_median = role_data.median()
+            role_n = role_counts.get(role, 0)
+            is_low_sample = role_n < LOW_SAMPLE_THRESHOLD
+
+            if is_low_sample:
+                low_sample_roles.append(role)
+
+            # Flag low-sample boxes with hatching + reduced opacity
+            # instead of the solid fill every other box gets.
+            if i < len(ax.patches):
+
+                box_patch = ax.patches[i]
+
+                if is_low_sample:
+                    box_patch.set_hatch("///")
+                    box_patch.set_alpha(0.55)
+                    box_patch.set_edgecolor(PURPLE["dark"])
+
+            q3 = role_data.quantile(0.75)
+            q1 = role_data.quantile(0.25)
+            iqr = q3 - q1
+
+            # Top of the upper whisker (capped at the group's actual
+            # max), so the label sits above the box/whisker instead
+            # of colliding with outlier dots or the box itself.
+            whisker_top = min(
+                q3 + 1.5 * iqr,
+                role_data.max(),
+            )
+
+            label_text = f"${role_median:,.0f}K"
+            if is_low_sample:
+                label_text += "*"
+
+            ax.text(
+                i,
+                whisker_top + (ax.get_ylim()[1] * 0.02),
+                label_text,
+                ha="center",
+                va="bottom",
+                fontsize=9,
+                fontweight="bold",
+                color=PURPLE["dark"],
+            )
+
+        # Headroom so the median labels never get clipped at the top
+        # of the chart.
+        ax.set_ylim(
+            ax.get_ylim()[0],
+            ax.get_ylim()[1] * 1.12,
+        )
+
         # Sample size per role, right on the x-tick label. A box built
         # from 5 postings and a box built from 150 postings should not
         # look equally trustworthy, so the count goes on the axis
         # itself instead of requiring a trip to another tab.
-        role_counts = filtered["Job_Simplified"].value_counts()
-
         ax.set_xticks(
             range(len(order))
         )
@@ -825,6 +946,24 @@ with tab_salary:
         )
 
         plt.close(fig)
+
+        # Real, legible text below the chart instead of tiny in-figure
+        # captions -- explains the reference line, the mean marker,
+        # and (only when relevant) the low-sample hatching.
+        caption_text = (
+            f"Dotted line = overall median (**${overall_median:,.0f}K**) · "
+            "diamond ◆ = mean · bold number = per-role median."
+        )
+
+        if low_sample_roles:
+
+            caption_text += (
+                f" *Hatched boxes ({', '.join(low_sample_roles)}) are "
+                f"built from fewer than {LOW_SAMPLE_THRESHOLD} postings "
+                "— treat those medians as rough, not precise."
+            )
+
+        st.caption(caption_text)
 
 
 # ============================================================
@@ -886,16 +1025,15 @@ with tab_roles:
             figsize=(6, 5)
         )
 
+        job_role_counts_ordered = (
+            filtered["Job_Simplified"]
+            .value_counts()
+        )
+
         sns.countplot(
             data=filtered,
             y="Job_Simplified",
-            order=(
-                filtered[
-                    "Job_Simplified"
-                ]
-                .value_counts()
-                .index
-            ),
+            order=job_role_counts_ordered.index,
             color=PURPLE["light"],
             ax=ax,
         )
@@ -912,13 +1050,25 @@ with tab_roles:
             "Job Role"
         )
 
-        # Exact count at the end of each bar, same treatment as the
-        # Skills, Experience, and Remote charts already get -- this
-        # was the one count-style chart in the dashboard without its
-        # own on-bar numbers.
+        # Count + percentage of the filtered total at the end of each
+        # bar, same treatment now applied to every chart in the
+        # dashboard so no bar is left as a bare, unlabeled shape.
+        total_roles = len(filtered)
+
         ax.bar_label(
             ax.containers[0],
+            labels=[
+                f"{count} ({count / total_roles * 100:.0f}%)"
+                for count in job_role_counts_ordered.values
+            ],
             padding=3,
+        )
+
+        # Headroom on the right so the wider "count (pct%)" labels
+        # never get clipped at the edge of the chart.
+        ax.set_xlim(
+            0,
+            ax.get_xlim()[1] * 1.18,
         )
 
         plt.tight_layout()
@@ -959,17 +1109,26 @@ with tab_roles:
             ax=ax,
         )
 
+        total_exp = len(filtered)
+
         for i, value in enumerate(
             exp_counts.values
         ):
 
+            pct = (value / total_exp * 100) if total_exp else 0
+
             bar.text(
                 i,
                 value,
-                f"{int(value)}",
+                f"{int(value)}\n({pct:.0f}%)",
                 ha="center",
                 va="bottom",
             )
+
+        ax.set_ylim(
+            0,
+            ax.get_ylim()[1] * 1.15,
+        )
 
         ax.set_title(
             "Experience Required"
@@ -1008,22 +1167,48 @@ with tab_roles:
             figsize=(6, 5)
         )
 
-        sns.countplot(
-            data=filtered,
-            x="Remote_Job",
+        # Computed manually (not via sns.countplot) and reindexed to
+        # always include both categories -- countplot silently drops
+        # a category's bar entirely when its count is 0 (e.g. filtering
+        # to a state/role with no remote postings), which left that
+        # bar's count-and-percentage label with nothing to attach to.
+        remote_counts = (
+            filtered["Remote_Job"]
+            .value_counts()
+            .reindex([0, 1])
+            .fillna(0)
+        )
+
+        remote_bars = sns.barplot(
+            x=["In-Person", "Remote"],
+            y=remote_counts.values,
             color=PURPLE["light"],
             ax=ax,
         )
 
-        ax.set_xticks(
-            [0, 1]
-        )
+        # Count and percentage on each bar, so the split is read as
+        # "447 postings, 96%" instead of guessed from bar height. This
+        # always runs for both bars, including a "0 (0%)" label when a
+        # category is empty under the current filters.
+        total_remote_chart = len(filtered)
 
-        ax.set_xticklabels(
-            [
-                "In-Person",
-                "Remote",
-            ]
+        for i, count in enumerate(remote_counts.values):
+
+            pct = (count / total_remote_chart * 100) if total_remote_chart else 0
+
+            ax.text(
+                i,
+                count,
+                f"{int(count)}\n({pct:.0f}%)",
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                fontweight="bold",
+            )
+
+        ax.set_ylim(
+            0,
+            ax.get_ylim()[1] * 1.15,
         )
 
         ax.set_title(
@@ -1120,13 +1305,22 @@ with tab_skills:
             ax=ax,
         )
 
+        total_skills = len(filtered)
+
         for i, value in enumerate(skill_counts["Count"]):
+            pct = (value / total_skills * 100) if total_skills else 0
             bar.text(
-                value + 0.5,
+                value + (ax.get_xlim()[1] * 0.01),
                 i,
-                str(int(value)),
+                f"{int(value)} ({pct:.0f}%)",
                 va="center",
+                fontsize=8.5,
             )
+
+        ax.set_xlim(
+            0,
+            ax.get_xlim()[1] * 1.15,
+        )
 
         ax.set_title("Most Requested Skills & Tools")
         ax.set_xlabel("Number of Postings")
@@ -1197,10 +1391,23 @@ with tab_geo:
         ax=ax,
     )
 
-    # Exact posting count at the end of each state's bar.
+    # Count + percentage of the filtered total at the end of each
+    # state's bar.
+    total_states = len(filtered)
+
     ax.bar_label(
         ax.containers[0],
+        labels=[
+            f"{count} ({count / total_states * 100:.0f}%)"
+            for count in state_counts.values
+        ],
         padding=3,
+    )
+
+    # Headroom so the wider "count (pct%)" labels aren't clipped.
+    ax.set_xlim(
+        0,
+        ax.get_xlim()[1] * 1.18,
     )
 
     # Make the top-15 cutoff explicit in the title -- otherwise a
